@@ -12,7 +12,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
-const SECRET_KEY = process.env.MICROSERVICE_SECRET_KEY || "AlIman_WhatsApp_Secret_2026_#Secured";
+// Updated fallback secret key to match main backend env
+const SECRET_KEY = process.env.MICROSERVICE_SECRET_KEY || "my_super_secret_key_123";
 
 let sock: any = null;
 let isConnecting = false;
@@ -63,7 +64,7 @@ const connectToWhatsApp = async () => {
     sock.ev.on("connection.update", async (update: any) => {
       const { connection, lastDisconnect } = update;
 
-      // 🟢 Fix: Request pairing code only when connection state updates to connecting and not registered
+      // Request pairing code only when connection state updates to connecting and not registered
       if (connection === "connecting" && !sock.authState.creds.registered && !pairingRequested) {
         pairingRequested = true;
         const rawPhone = process.env.WHATSAPP_PHONE_NUMBER;
@@ -144,16 +145,18 @@ app.post("/send-message", async (req: Request, res: Response) => {
       return res.status(503).json({ success: false, message: "WhatsApp socket not connected yet!" });
     }
 
-    let formattedPhone = phone.trim().replace(/\D/g, "");
+    // Clean and format phone number properly
+    let rawNumber = phone.replace(/@s\.whatsapp\.net$/i, "").trim();
+    let formattedPhone = rawNumber.replace(/\D/g, "");
+
     if (formattedPhone.startsWith("0")) {
       formattedPhone = `88${formattedPhone}`;
     }
-    if (!formattedPhone.endsWith("@s.whatsapp.net")) {
-      formattedPhone = `${formattedPhone}@s.whatsapp.net`;
-    }
 
-    const result = await sock.sendMessage(formattedPhone, { text: message });
-    console.log(`✅ [WhatsApp Dispatch Success] To: ${phone} | Msg ID: ${result?.key?.id}`);
+    const jid = `${formattedPhone}@s.whatsapp.net`;
+
+    const result = await sock.sendMessage(jid, { text: message });
+    console.log(`✅ [WhatsApp Dispatch Success] To: ${formattedPhone} | Msg ID: ${result?.key?.id}`);
 
     return res.status(200).json({
       success: true,
