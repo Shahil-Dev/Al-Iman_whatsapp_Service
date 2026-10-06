@@ -36,6 +36,18 @@ const connectToWhatsApp = async () => {
   isConnecting = true;
 
   try {
+   
+    if (sock) {
+      try {
+        sock.ev.removeAllListeners("connection.update");
+        sock.ev.removeAllListeners("creds.update");
+        sock.end(undefined);
+      } catch (e) {
+     
+      }
+      sock = null;
+    }
+
     const {
       default: makeWASocket,
       useMultiFileAuthState,
@@ -64,7 +76,6 @@ const connectToWhatsApp = async () => {
     sock.ev.on("connection.update", async (update: any) => {
       const { connection, lastDisconnect } = update;
 
-      // Request pairing code only when connection state updates to connecting and not registered
       if (connection === "connecting" && !sock.authState.creds.registered && !pairingRequested) {
         pairingRequested = true;
         const rawPhone = process.env.WHATSAPP_PHONE_NUMBER;
@@ -75,7 +86,6 @@ const connectToWhatsApp = async () => {
             cleanNumber = `88${cleanNumber}`;
           }
 
-          // Wait 6 seconds for Baileys WebSocket handshake to stabilize
           setTimeout(async () => {
             try {
               if (sock && !sock.authState.creds.registered) {
@@ -86,7 +96,7 @@ const connectToWhatsApp = async () => {
               }
             } catch (err: any) {
               console.error("⚠️ Pairing request failed (will retry):", err?.message || err);
-              pairingRequested = false; // reset to allow retry on next connection
+              pairingRequested = false;
             }
           }, 6000);
         }
@@ -96,6 +106,14 @@ const connectToWhatsApp = async () => {
         isConnecting = false;
         pairingRequested = false;
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        
+     
+        if (statusCode === 440) {
+          console.warn("⚠️ Connection replaced (Status 440). Delaying reconnect to prevent loop...");
+          setTimeout(() => connectToWhatsApp(), 10000); 
+          return;
+        }
+
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 401;
 
         console.log(`WhatsApp Closed (Status: ${statusCode}). Reconnecting: ${shouldReconnect}`);
